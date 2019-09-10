@@ -72,7 +72,7 @@ class ChexnetTrainer ():
         scheduler = ReduceLROnPlateau(optimizer, factor = 0.1, patience = 5, mode = 'min')
                 
         #-------------------- SETTINGS: LOSS
-        loss = torch.nn.BCELoss(size_average = True)
+        loss = torch.nn.BCELoss(reduction='mean')
         
         #---- Load checkpoint 
         if checkpoint != None:
@@ -90,15 +90,14 @@ class ChexnetTrainer ():
             timestampTime = time.strftime("%H%M%S")
             timestampDate = time.strftime("%d%m%Y")
             timestampSTART = timestampDate + '-' + timestampTime
-                         
+
             ChexnetTrainer.epochTrain (model, dataLoaderTrain, optimizer, scheduler, trMaxEpoch, nnClassCount, loss)
             lossVal, losstensor = ChexnetTrainer.epochVal (model, dataLoaderVal, optimizer, scheduler, trMaxEpoch, nnClassCount, loss)
-            
             timestampTime = time.strftime("%H%M%S")
             timestampDate = time.strftime("%d%m%Y")
             timestampEND = timestampDate + '-' + timestampTime
             
-            scheduler.step(losstensor.data[0])
+            scheduler.step(losstensor.item())
             
             if lossVal < lossMIN:
                 lossMIN = lossVal    
@@ -130,28 +129,27 @@ class ChexnetTrainer ():
     #-------------------------------------------------------------------------------- 
         
     def epochVal (model, dataLoader, optimizer, scheduler, epochMax, classCount, loss):
-        
         model.eval ()
         
         lossVal = 0
         lossValNorm = 0
         
         losstensorMean = 0
-        
-        for i, (input, target) in enumerate (dataLoader):
-            
-            target = target.cuda(async=True)
-                 
-            varInput = torch.autograd.Variable(input, volatile=True)
-            varTarget = torch.autograd.Variable(target, volatile=True)    
-            varOutput = model(varInput)
-            
-            losstensor = loss(varOutput, varTarget)
-            losstensorMean += losstensor
-            
-            lossVal += losstensor.data[0]
-            lossValNorm += 1
-            
+        with torch.no_grad(): 
+            for i, (input, target) in enumerate (dataLoader):
+                
+                target = target.cuda(async=True)
+                    
+                varInput = torch.autograd.Variable(input)
+                varTarget = torch.autograd.Variable(target)    
+                varOutput = model(varInput)
+                
+                losstensor = loss(varOutput, varTarget)
+                losstensorMean += losstensor
+                
+                lossVal += losstensor.item()
+                lossValNorm += 1
+                
         outLoss = lossVal / lossValNorm
         losstensorMean = losstensorMean / lossValNorm
         
@@ -220,6 +218,8 @@ class ChexnetTrainer ():
         transformList.append(transforms.TenCrop(transCrop))
         transformList.append(transforms.Lambda(lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])))
         transformList.append(transforms.Lambda(lambda crops: torch.stack([normalize(crop) for crop in crops])))
+
+        
         transformSequence=transforms.Compose(transformList)
         
         datasetTest = DatasetGenerator(pathImageDirectory=pathDirData, pathDatasetFile=pathFileTest, transform=transformSequence)
@@ -229,29 +229,29 @@ class ChexnetTrainer ():
         outPRED = torch.FloatTensor().cuda()
        
         model.eval()
-        
-        for i, (input, target) in enumerate(dataLoaderTest):
-            
-            target = target.cuda()
-            outGT = torch.cat((outGT, target), 0)
-            
-            bs, n_crops, c, h, w = input.size()
-            
-            varInput = torch.autograd.Variable(input.view(-1, c, h, w).cuda(), volatile=True)
-            
-            out = model(varInput)
-            outMean = out.view(bs, n_crops, -1).mean(1)
-            
-            outPRED = torch.cat((outPRED, outMean.data), 0)
+        with torch.no_grad(): 
+            for i, (input, target) in enumerate(dataLoaderTest):
+                
+                target = target.cuda()
+                outGT = torch.cat((outGT, target), 0)
+                
+                bs, n_crops, c, h, w = input.size()
+                
+                varInput = torch.autograd.Variable(input.view(-1, c, h, w).cuda())
+                
+                out = model(varInput)
+                outMean = out.view(bs, n_crops, -1).mean(1)
+                
+                outPRED = torch.cat((outPRED, outMean.data), 0)
 
-        aurocIndividual = ChexnetTrainer.computeAUROC(outGT, outPRED, nnClassCount)
-        aurocMean = np.array(aurocIndividual).mean()
-        
-        print ('AUROC mean ', aurocMean)
-        
-        for i in range (0, len(aurocIndividual)):
-            print (CLASS_NAMES[i], ' ', aurocIndividual[i])
-        
+            aurocIndividual = ChexnetTrainer.computeAUROC(outGT, outPRED, nnClassCount)
+            aurocMean = np.array(aurocIndividual).mean()
+            
+            print ('AUROC mean ', aurocMean)
+            
+            for i in range (0, len(aurocIndividual)):
+                print (CLASS_NAMES[i], ' ', aurocIndividual[i])
+            
      
         return
 #-------------------------------------------------------------------------------- 

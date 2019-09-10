@@ -69,7 +69,7 @@ def runTest():
     imgtransResize = 256
     imgtransCrop = 224
     
-    pathModel = './models/m-25012018-123527.pth.tar'
+    pathModel = './models/m-02082019-004013.pth.tar'
     
     timestampLaunch = ''
     

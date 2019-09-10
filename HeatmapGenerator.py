@@ -93,7 +93,7 @@ class HeatmapGenerator ():
 
 pathInputImage = 'test/00009285_000.png'
 pathOutputImage = 'test/heatmap.png'
-pathModel = 'models/m-25012018-123527.pth.tar'
+pathModel = 'models/m-02082019-004013.pth.tar'
 
 nnArchitecture = 'DENSE-NET-121'
 nnClassCount = 14
